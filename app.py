@@ -6,7 +6,11 @@ from dotenv import load_dotenv
 import  alpaca_trade_api as tradeapi
 import fire
 import questionary
-# from MCForecastTools import MCSimulation
+from MCForecastTools import MCSimulation
+from colorama import Fore, Back, Style
+from SharpeRatio import get_sharpe_ratio
+from CreateDataframe import df_portfolio
+from MonteCarloSim import mc_sim
 
 load_dotenv("api.env")
 
@@ -18,9 +22,27 @@ alpaca = tradeapi.REST(
     alpaca_secret_key,
     api_version="v2")
 
+
 # Global Variables
 user_name = ""
 favorited_stocks = []
+
+# Dictionary with provided stock names and ticker symbols
+stocks = {
+    "Apple Inc" : "AAPL",
+    "Amazon.com Inc" : "AMZN",
+    "Tesla Inc" : "TSLA",
+    "Johnson & Johnson" : "JNJ",
+    "Pfizer Inc" : "PFE",
+    "Morgan Stanley" : "MS",
+    "Coinbase Global Inc" : "COIN",
+    "Visa Inc" : "V",
+    "American Express Company" : "AXP",
+    "Paypal Holding Inc" : "PYPL",
+    "General Electric Company" : "GE",
+    "Delta Air Lines Inc" : "DAL",
+    "Exxon Mobil Corp" : "XOM"
+}
 
 
 # User intro functionality
@@ -35,70 +57,33 @@ def user_intro():
     print(f"\nHello {user_name}! Welcome to your portfolio planner!\n")
     
 
-# Sharpe ratio functionality
-def get_sharpe_ratio(ticker):
-    
-    # Api dat information inputs
-    timeframe = "1Day"
-    start_date = pd.Timestamp("2010-01-01", tz="America/New_York").isoformat()
-    end_date = pd.Timestamp("2023-05-03", tz="America/New_York").isoformat()
-    
-    # Api data to dataframe
-    df = alpaca.get_bars(
-    ticker,
-    timeframe,
-    start=start_date,
-    end=end_date
-    ).df
-    
-    # Data return computations
-    daily_returns = df['close'].pct_change().dropna()
-    annual_average_return = daily_returns.mean() * 1260
-    annual_standard_deviation = daily_returns.std() * np.sqrt(1260)
-    sharpe_ratio = annual_average_return / annual_standard_deviation
-    
-    print(f"Sharpe ratio for {ticker} is {sharpe_ratio : .02f}.")
+# Main functionality
+def main_application():
+    portfolio_cli_running = True
 
-
-# Application run functionality    
-def run():
-    if user_name == "":
-        user_intro()
-    
-    cruddy_cli_running = True
-    
-    # Dictionary with provided stock names and ticker symbols
-    stocks = {
-        "Apple Inc" : "AAPL",
-        "Amazon.com Inc" : "AMZN",
-        "Tesla Inc" : "TSLA",
-        "Johnson & Johnson" : "JNJ",
-        "Pfizer Inc" : "PFE",
-        "Morgan Stanley" : "MS",
-        "Coinbase Gllobal Inc" : "COIN",
-        "Visa Inc" : "V",
-        "American Express Company" : "AXP",
-        "Paypal Holding Inc" : "PYPL",
-        "General Electric Company" : "GE",
-        "Delta Air Lines Inc" : "DAL",
-        "Exxon Mobil Corp" : "XOM"
-    }
-
-    while cruddy_cli_running:
+    while portfolio_cli_running:
         choice = questionary.select(
             "Where would you like to continue?",
             choices=["Research Stocks", "Run Monte Carlo Simulation", "Favorites List", "Quit"]
         ).ask()
         
+        # Research Stock functionality
         if choice == "Research Stocks":
             print("\nHere you can choose a stock to research\n")
             print("If you are satisfied with the data you can add it to your favorites or move on to the next module\n")
             
-            continue_answer = questionary.select("Shall we continue?\n", choices = ["Yes", "No"]).ask()
+            continue_answer = questionary.select("Shall we continue?", choices = ["Yes", "No"]).ask()
             if continue_answer == "No":
-                cruddy_cli_running = False
-                print("\nThank you for using the CRUDdy CLI! Goodbye!")
-                break
+                # return to main page condition
+                return_to_start = questionary.select("\nReturn to main page?\n", choices = ["Yes", "No"]).ask()
+                if return_to_start == "Yes":
+                    portfolio_cli_running = False
+                    main_application()
+                    break
+                else:
+                    porfotlio_cli_running = False
+                    print("\nThank you for using the Portfolio Planner! Goodbye!")
+                    break
                                                  
             choice = questionary.select(
                 f"{user_name} what stocks would you like to review?", 
@@ -109,7 +94,7 @@ def run():
                     "Johnson & Johnson",
                     "Pfizer Inc",
                     "Morgan Stanley",
-                    "Coinbase Gllobal Inc",
+                    "Coinbase Global Inc",
                     "Visa Inc",
                     "American Express Company",
                     "Paypal Holding Inc",
@@ -120,7 +105,7 @@ def run():
                 ]).ask()
             
             if choice != "QUIT - not stock :(":
-                get_sharpe_ratio(stocks[choice])
+                get_sharpe_ratio(stocks[choice], alpaca)
                 favorite_stock = questionary.select("\nWould you like to add to favorites?\n", choices = ["Yes", "No"]).ask()
                 
                 # Add stock to favorites list
@@ -131,9 +116,89 @@ def run():
                         print("stock is already in favorites\n")
                 
             else:
-                cruddy_cli_running = False
-                print("\nThank you for using the CRUDdy CLI! Goodbye!")
+                portfolio_cli_running = False
+                print("\nThank you for using the Portfolio Planner! Goodbye!")
         
+        
+        # Run Monte Carlo Simulation
+        elif choice == "Run Monte Carlo Simulation":
+            print("This module will perform a simulation of your portfolio performance. Please answer the following questions.\n")
+            
+            
+    
+            # Gather user information for simulation
+            initial_investment = questionary.text("How much money (USD) are you investing in this portfolio?").ask()
+            
+            # add integer contitional check here...
+            investment_years = questionary.text("How many years will you be investing?").ask()
+            stock1 = stocks[questionary.select("Select a stock for your portfolio", choices = stocks).ask()]
+            stock2 = stocks[questionary.select("Select a second stock for your portfolio", choices = stocks).ask()]
+            
+            # Stock Choice Validation
+            while stock1 == stock2:
+                print("Sorry please choose another stock, you chose this one already\n")
+                stock2 = stocks[questionary.select("Select a second stock for your portfolio", choices = stocks).ask()]
+            
+            portfolio_weights = questionary.select(
+                f"Would you like this to be an equally-weighted portfolio? (ie: .50 {stock1} and .50 {stock2})?",
+                choices=["Yes", "No",]).ask()
+            
+            # Portfolio weight validator condtional
+            def weight_validator(weight):
+                if weight > 1.0 or weight < 0.1:
+                    print(Fore.RED + "Please choose a number between the specified ratio of 0.1 and 0.9")
+                    weight = float(questionary.text(
+                    f"What percentage of the portfolio will be made up of {stock1}? Please enter the percentage in decimal format between 0.1 to 0.9.").ask())
+                    return weight_validator(weight)
+                else:
+                    return weight
+
+            # Portfolio weights check
+            if portfolio_weights == "Yes":
+                weight1 = .50
+                weight2 = .50
+            else:
+                weight1 = float(questionary.text(
+                    f"What percentage of the portfolio will be made up of {stock1}? Please enter the percentage in decimal format between 0.1 to 0.9.").ask())
+                weight1 = weight_validator(weight1)
+                confirm = questionary.select(
+                    f"The remainder of the portfolio will comprise of {1.0 - weight1: .02} of {stock2}. Is this correct?", choices = ["Yes", "No"]).ask()
+        
+                if confirm == "Yes":
+                    weight2 = 1.0 - weight1
+                
+                else:
+                    portfolio_cli_running = False
+                    print("\nThank you for using the Portfolio Planner! Goodbye!")
+                    break
+
+            # Start Monte Carlo Simulation
+            choice = questionary.select(
+                "Would you like to start a Monte Carlo Simulation?", 
+                choices=["Yes", "No"]).ask()
+
+            if choice == "Yes":
+                mc_sim(df_portfolio(stock1, stock2, alpaca_api_key, alpaca_secret_key), 
+                       float(weight1), 
+                       float(weight2), 
+                       int(investment_years), 
+                       int(initial_investment))
+            
+            # return to main page condition
+            return_to_start = questionary.select("\nReturn to main page?\n", choices = ["Yes", "No"]).ask()
+            if return_to_start == "Yes":
+                portfolio_cli_running = False
+                main_application()
+                break
+            else:
+                portfolio_cli_running = False
+                print("\nThank you for using the Portfolio Planner! Goodbye!")
+                break
+     
+                
+
+                    
+        # Add to favorite list
         elif choice == "Favorites List":
             if favorited_stocks == []:
                 print("Favorites list is empty\n")
@@ -142,18 +207,26 @@ def run():
                     print(stock)
             
         else:
-            cruddy_cli_running = False
-            print("\nThank you for using the CRUDdy CLI! Goodbye!")
+            portfolio_cli_running = False
+            print("\nThank you for using the Portfolio Planner! Goodbye!")
+            
+
+# Application run functionality    
+def run():
+    
+    if user_name == "":
+        user_intro()
         
-                                                 
+    main_application()
+    
+    
                                                  
 if __name__ == "__main__":
     fire.Fire(run)
     
     
     
-    
-    
+
 # import pandas as pd
 # import sqlalchemy as sql
 # import os
